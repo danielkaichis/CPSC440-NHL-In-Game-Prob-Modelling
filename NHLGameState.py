@@ -74,6 +74,31 @@ class NHLGameState:
             "situation_code": self.situation_code
         }
 
+    def get_time_seconds(self):
+        """Convert 'MM:SS' string from timeRemaining to total seconds remaining."""
+
+        if isinstance(self.time_remaining, str):
+            try:
+                minutes, seconds = map(int, self.time_remaining.split(':'))
+                return minutes * 60 + seconds
+            except ValueError:
+                return None
+        return None
+    
+    def get_game_time_remaining(self):
+        """Calculate total game time remaining in seconds."""
+        seconds_remaining = self.get_time_seconds()
+        if seconds_remaining is None:
+            return None
+        
+        # NHL games have 3 periods of 20 minutes each (1200 seconds)
+        total_game_seconds = 3 * 20 * 60
+        
+        # Calculate elapsed time based on current period and time remaining
+        elapsed_time = (self.period - 1) * 20 * 60 + (total_game_seconds - seconds_remaining)
+        
+        return total_game_seconds - elapsed_time
+
 
 
     
