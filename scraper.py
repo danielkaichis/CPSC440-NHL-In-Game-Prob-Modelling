@@ -42,7 +42,7 @@ def download_dynamic_seasons(seasons, base_dir="nhl_raw_data"):
                     print(f"[{game_id}] Not Found (404).")
                     consecutive_404s += 1
                     
-                    # We wait for 5 consecutive missing games instead of 3. 
+                    # We wait for 5 consecutive missing games to confirm the season has ended.
                     # This protects against weird mid-season postponements or cancellations.
                     if consecutive_404s >= 5:
                         print(f"\nHit {consecutive_404s} missing games in a row. End of schedule detected.")
@@ -80,12 +80,7 @@ def download_dynamic_seasons(seasons, base_dir="nhl_raw_data"):
         else:
             print(f"\nNo data found for the {season_year} season.")
 
-# --- Execution ---
 if __name__ == "__main__":
-    target_seasons = [2024, 2025]
+    target_seasons = [2023]
     print("Initializing dynamic scraper...")
     download_dynamic_seasons(target_seasons)
-
-
-
-# notes: some failed, probably not super important but we can re-run on those missing later

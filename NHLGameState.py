@@ -1,6 +1,6 @@
 class NHLGameState:
-    def __init__(self, play_data, home_team_id, away_team_id, 
-                 home_strength, away_strength, home_advantage):
+    def __init__(self, play_data, home_team_id, away_team_id, current_home_score, current_away_score,
+                 current_home_sog, current_away_sog):
         """
         Initialize from a single play's data 
         """
@@ -13,66 +13,54 @@ class NHLGameState:
         self.period = play_data['periodDescriptor']['number']
         self.situation_code = play_data.get('situationCode')
         
-        # Scores and shots (already cumulative in data)
-        details = play_data.get('details', {})
-        self.home_score = details.get('homeScore', 0)
-        self.away_score = details.get('awayScore', 0)
-        self.home_sog = details.get('homeSOG', 0)
-        self.away_sog = details.get('awaySOG', 0)
-        
-        # Pre-computed strength metrics
-        self.home_strength = home_strength
-        self.away_strength = away_strength
-        self.home_advantage = home_advantage
+        # Scores and shots (not cummulative in data, so we build them up as we go)
+        # only cummulative for shots and goal events, but not for other events like penalties, faceoffs, etc.
+        self.home_sog = current_home_sog # NEW
+        self.away_sog = current_away_sog
+        self.home_score = current_home_score
+        self.away_score = current_away_score
     
     def get_manpower_state(self):
-        """Decode situation code to human-readable format.
+        if not self.situation_code: return 'unknown'
         
-        NHL Situation Codes:
-        - 1551: 5v5 (even strength, most common)
-        - 1541: 5v4 (one team has power play)
-        - 1451: 4v5 (other team has power play)
-        - 1560: 5v5 with empty net
-        - 0651: Special situations (double penalty, shootout, etc.)
-        """
-        if not self.situation_code:
-            return 'unknown'
+        # Pad with leading zeros (turns '551' back into '0551')
+        situation_str = str(self.situation_code).zfill(4)
         
-        # Convert to int if it's a string (JSON stores numbers as strings sometimes)
-        try:
-            code_int = int(self.situation_code)
-        except (ValueError, TypeError):
-            return f'unknown_{self.situation_code}'
+        if len(situation_str) != 4: return 'special'
+            
+        # Unpack the specific positions
+        away_goalie = int(situation_str[0])
+        away_skaters = int(situation_str[1])
+        home_skaters = int(situation_str[2])
+        home_goalie = int(situation_str[3])
         
-        # Known situation code mappings
-        situation_map = {
-            1551: '5v5',      # Even strength
-            1541: '5v4',      # Power play (one team)
-            1451: '4v5',      # Power play (other team)
-            1560: '5v5_EN',   # Empty net
-            651: 'special'    # Double penalty, shootout, etc.
-        }
+        # Empty net scoring rates are astronomically higher, so they must be separate from 5v5
+        if away_goalie == 0 or home_goalie == 0:
+            if away_goalie == 0 and home_goalie == 0: return 'special' # Both pulled
+            if home_goalie == 0: return 'home_empty_net'
+            if away_goalie == 0: return 'away_empty_net'
+            
+        skater_diff = home_skaters - away_skaters
         
-        return situation_map.get(code_int, f'unknown_{code_int}')
+        if skater_diff == 0:
+            if home_skaters == 5: return '5v5'
+            if home_skaters == 4: return '4v4'
+            if home_skaters == 3: return '3v3' # Overtime
+        elif skater_diff == 1: 
+            return 'home_PP_1' # Catches 5v4 and 4v3
+        elif skater_diff == 2: 
+            return 'home_PP_2' # Catches 5v3
+        elif skater_diff == -1: 
+            return 'away_PP_1' # Catches 4v5 and 3v4
+        elif skater_diff == -2: 
+            return 'away_PP_2' # Catches 3v5
+            
+        return 'special'
     
     def get_score_differential(self):
         """Home score minus away score."""
         return self.home_score - self.away_score
     
-    def get_state_vector(self):
-        """Return state for modeling."""
-        return {
-            "time_remaining": self.time_remaining,
-            "period": self.period,
-            "score_differential": self.get_score_differential(),
-            "manpower_state": self.get_manpower_state(),
-            "home_sog": self.home_sog,
-            "away_sog": self.away_sog,
-            "home_strength": self.home_strength,
-            "away_strength": self.away_strength,
-            "home_advantage": self.home_advantage,
-            "situation_code": self.situation_code
-        }
 
     def get_time_seconds(self):
         """Convert 'MM:SS' string from timeRemaining to total seconds remaining."""
@@ -87,18 +75,28 @@ class NHLGameState:
     
     def get_game_time_remaining(self):
         """Calculate total game time remaining in seconds."""
-        seconds_remaining = self.get_time_seconds()
-        if seconds_remaining is None:
-            return None
+        seconds_in_period = self.get_time_seconds() # This is 1200 down to 0
+        if seconds_in_period is None:
+            return 0
         
-        # NHL games have 3 periods of 20 minutes each (1200 seconds)
-        total_game_seconds = 3 * 20 * 60
-        
-        # Calculate elapsed time based on current period and time remaining
-        elapsed_time = (self.period - 1) * 20 * 60 + (total_game_seconds - seconds_remaining)
-        
-        return total_game_seconds - elapsed_time
+        # Period 1: 2400 + seconds_in_period
+        # Period 2: 1200 + seconds_in_period
+        # Period 3: 0 + seconds_in_period
+        return (3 - self.period) * 1200 + seconds_in_period
 
+    def get_state_vector(self):
+        """Return state for modeling."""
+        return {
+            "time_remaining": self.get_game_time_remaining(),
+            "period": self.period,
+            "score_differential": self.get_score_differential(),
+            "manpower_state": self.get_manpower_state(),
+            "home_score": self.home_score,
+            "away_score": self.away_score,
+            "home_sog": self.home_sog,
+            "away_sog": self.away_sog,
+            "situation_code": self.situation_code
+        }
 
 
     
