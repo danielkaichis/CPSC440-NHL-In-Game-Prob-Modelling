@@ -1,12 +1,16 @@
-import os
-import pandas as pd
 import pymc as pm
 import matplotlib.pyplot as plt
 import arviz as az
-import numpy as np
 
 from LoadGameData import load_game_data
 from EmpBayes import calc_priors
+from advi_utils import run_advi_inference
+from training_pipeline import (
+    DEFAULT_TRAIN_FILE_PATHS,
+    filter_positive_durations,
+    load_and_concat_event_files,
+    save_trace_to_netcdf,
+)
 
 def run_baseline_advi(df, priors, state_mapping):
     """
@@ -40,9 +44,12 @@ def run_baseline_advi(df, priors, state_mapping):
         away_scoring = pm.Poisson('away_scoring', mu=mu_away, observed=away_goals_obs)
         pen_calling = pm.Poisson('pen_calling', mu=mu_pen, observed=penalties_obs)
         
-        print("Running ADVI Inference...")
-        mean_field = pm.fit(method='advi', n=30000, obj_optimizer=pm.adam(learning_rate=0.01))
-        trace = mean_field.sample(1000)
+        trace = run_advi_inference(
+            n_iter=30000,
+            learning_rate=0.01,
+            n_samples=1000,
+            start_msg="Running ADVI Inference...",
+        )
         
     return trace, nhl_model
 
@@ -51,20 +58,14 @@ def plot_model_results(trace, state_mapping):
     """
     Generates the two most important plots for your Bayesian analysis.
     """
-    print("Generating plots...")
     
-    # The Trace Plot (Checking ADVI Health)
-    # proves model successfully found the posterior distributions without going off to infinity.
     az.plot_trace(trace, var_names=['lambda_home', 'lambda_away'])
     plt.suptitle("Trace Plot: Scoring Rate Posteriors", fontsize=16)
     plt.tight_layout()
     plt.show()
 
-    # plot for manpower states
-    # Extract the samples for the home team
     fig, ax = plt.subplots(figsize=(10, 6))
     
-    # ArviZ takes the trace directly and finds 'lambda_home' on its own
     az.plot_forest(trace, var_names=['lambda_home'], combined=True, ax=ax)
     
     labels = [state_mapping[i] for i in range(len(state_mapping))]
@@ -78,42 +79,22 @@ def plot_model_results(trace, state_mapping):
 
 
 if __name__ == "__main__":
-    file_paths = [
-        'nhl_raw_data/2023_2024_part1.json',
-        'nhl_raw_data/2023_2024_part2.json',
-        'nhl_raw_data/2024_2025_part1.json',
-        'nhl_raw_data/2024_2025_part2.json',
-        'nhl_raw_data/2025_2026_part1.json',
-    ]
+    file_paths = DEFAULT_TRAIN_FILE_PATHS
     
     print("Flattening JSON files via LoadGameData module...")
-    all_dfs = []
-    
-    for filepath in file_paths:
-        if os.path.exists(filepath):
-            print(f"Processing {filepath}...")
-            df_part = load_game_data(filepath) 
-            all_dfs.append(df_part)
-        else:
-            print(f"Warning: Could not find {filepath}. Check your directory.")
-            
-    # Combine the four files
-    df_events = pd.concat(all_dfs, ignore_index=True)
+    df_events = load_and_concat_event_files(file_paths, load_game_data)
     print(f"\nMaster Event Table created with {len(df_events)} total events.")
     
-    # Clean the combined data
-    df_events = df_events[df_events['duration_seconds'] > 0].copy()
+    df_events = filter_positive_durations(df_events)
     
-    print("Calculating Empirical Priors...")
     df_ready, priors_df, mapping = calc_priors(df_events, prior_weight_games=20)
     
-    # Run Inference
     posterior_trace, model = run_baseline_advi(df_ready, priors_df, mapping)
     
-    print("\nInference Complete. State Mapping:")
-    print(mapping)
-
-    az.to_netcdf(posterior_trace, "nhl_advi_trace.nc")
-    print("Saved successfully to nhl_advi_trace.nc")
+    save_trace_to_netcdf(
+        posterior_trace,
+        "nhl_advi_trace.nc",
+        success_msg="Saved successfully to nhl_advi_trace.nc",
+    )
 
     plot_model_results(posterior_trace, mapping)

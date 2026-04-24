@@ -22,7 +22,6 @@ def download_dynamic_seasons(seasons, base_dir="nhl_raw_data"):
         consecutive_404s = 0
         game_num = 1 # Start at Game 1
         
-        # Keep scraping forever until we trigger the break condition
         while True:
             game_id = f"{season_year}02{str(game_num).zfill(4)}"
             url = f"https://api-web.nhle.com/v1/gamecenter/{game_id}/play-by-play"
@@ -42,8 +41,6 @@ def download_dynamic_seasons(seasons, base_dir="nhl_raw_data"):
                     print(f"[{game_id}] Not Found (404).")
                     consecutive_404s += 1
                     
-                    # We wait for 5 consecutive missing games to confirm the season has ended.
-                    # This protects against weird mid-season postponements or cancellations.
                     if consecutive_404s >= 5:
                         print(f"\nHit {consecutive_404s} missing games in a row. End of schedule detected.")
                         break 
@@ -55,7 +52,6 @@ def download_dynamic_seasons(seasons, base_dir="nhl_raw_data"):
                 
             game_num += 1
             
-        # split file to meet github size limits
         total_games = len(season_data)
         
         if total_games > 0:
@@ -67,12 +63,10 @@ def download_dynamic_seasons(seasons, base_dir="nhl_raw_data"):
             print(f"\nTotal valid games collected for {season_year}: {total_games}")
             print(f"Splitting dynamically at game {midpoint}...")
             
-            # Slice the first half and save
             with open(part1_file, 'w') as f:
                 json.dump(season_data[:midpoint], f)
             print(f"Saved Part 1 -> {part1_file} ({len(season_data[:midpoint])} games)")
             
-            # Slice the second half and save
             with open(part2_file, 'w') as f:
                 json.dump(season_data[midpoint:], f)
             print(f"Saved Part 2 -> {part2_file} ({len(season_data[midpoint:])} games)")

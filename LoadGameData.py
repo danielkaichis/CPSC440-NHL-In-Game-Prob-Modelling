@@ -16,36 +16,23 @@ def load_game_data(file_path):
         home_team_id = game['homeTeam']['id']
         away_team_id = game['awayTeam']['id']
         
-        # Reset game states at puck drop
         prev_time = 3600
         current_home_score = 0
         current_away_score = 0
-        current_home_sog = 0
-        current_away_sog = 0
         
         for play in plays:
             details = play.get('details', {})
-            
-            # update running totals for shots on goal if available in the play details
-            if 'homeSOG' in details:
-                current_home_sog = details['homeSOG']
-            if 'awaySOG' in details:
-                current_away_sog = details['awaySOG']
                 
-            # instantiate state object with current cumulative scores and SOG
             state = NHLGameState(
                 play, home_team_id, away_team_id, 
-                current_home_score, current_away_score, 
-                current_home_sog, current_away_sog)
+                current_home_score, current_away_score)
             
             vector = state.get_state_vector()
             current_time = vector['time_remaining']
             vector['game_id'] = game_id
             
-            # Calculate how long the previous state lasted before this new event
             vector['duration_seconds'] = max(0, prev_time - current_time)
             
-            # check for goals and update scores accordingly
             is_goal = play.get('typeDescKey') == 'goal'
             if is_goal:
                 scoring_team = details.get('eventOwnerTeamId')
