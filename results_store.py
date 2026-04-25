@@ -9,7 +9,7 @@ def ensure_results_dir(results_dir="results"):
     os.makedirs(results_dir, exist_ok=True)
     return results_dir
 
-def save_sliding_results(df_results, model_name, run_name=None, results_dir="results"):
+def save_hierarchical_window_results(df_results, model_name, run_name=None, results_dir="results"):
     ensure_results_dir(results_dir)
     run_id = run_name or _stamp()
 

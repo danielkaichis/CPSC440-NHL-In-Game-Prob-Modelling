@@ -1,3 +1,4 @@
+import numpy as np
 from LoadGameData import load_game_data
 from MonteCarlo import NHLMonteCarlo
 from results_store import save_checkpoint_scores
@@ -7,8 +8,6 @@ from evaluation_common import (
     DEFAULT_CHECKPOINTS,
     evaluate_checkpoints,
 )
-
-import numpy as np
 
 _PP_STATES = {"home_PP_1", "home_PP_2", "away_PP_1", "away_PP_2"}
 
