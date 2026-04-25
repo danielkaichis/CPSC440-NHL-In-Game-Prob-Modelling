@@ -23,7 +23,6 @@ def _read_game_ids(json_files):
                 game_ids.add(game.get('id'))
     return game_ids
 
-
 def _posterior_to_team_priors(trace, min_sd=1e-3):
     off = trace.posterior['off_stars']
     deff = trace.posterior['def_stars']
@@ -35,9 +34,8 @@ def _posterior_to_team_priors(trace, min_sd=1e-3):
         'def_sd': np.clip(deff.std(dim=("chain", "draw")).values, min_sd, None),
     }
 
-
 def _trace_path(i):
-    return f"sliding_trace_window_{i:03d}.nc"
+    return f"models/sliding_trace_window_{i:03d}.nc"
 
 def fit_sliding_windows(
     train_files,
@@ -51,7 +49,7 @@ def fit_sliding_windows(
     Fit one ADVI trace per test window.
 
     Returns window_meta: list of (i, window_start, window_end, test_window_df)
-    with each trace saved to sliding_trace_window_NNN.nc.
+    with each trace saved to models/sliding_trace_window_NNN.nc.
     """
     all_files = list(dict.fromkeys(train_files + test_files))
 
@@ -109,7 +107,7 @@ def fit_sliding_windows(
 
         path = _trace_path(i)
         az.to_netcdf(trace, path)
-        print(f"  Saved trace: {path}")
+        print(f"Saved trace: {path}")
 
         window_meta.append((i, window_start, window_end, test_window))
 

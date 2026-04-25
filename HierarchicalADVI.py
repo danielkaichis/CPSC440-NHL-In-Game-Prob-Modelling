@@ -98,8 +98,8 @@ if __name__ == "__main__":
     print("\nInference Complete.")
     save_trace_to_netcdf(
         posterior_trace,
-        "h_nhl_trace.nc",
-        success_msg="Saved hierarchical trace to h_nhl_trace.nc",
+        "models/h_nhl_trace.nc",
+        success_msg="Saved hierarchical trace to models/h_nhl_trace.nc",
     )
 
     az.plot_forest(posterior_trace, var_names=['off_stars'], combined=True)

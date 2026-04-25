@@ -93,8 +93,8 @@ if __name__ == "__main__":
     
     save_trace_to_netcdf(
         posterior_trace,
-        "nhl_advi_trace.nc",
-        success_msg="Saved successfully to nhl_advi_trace.nc",
+        "models/nhl_advi_trace.nc",
+        success_msg="Saved successfully to models/nhl_advi_trace.nc",
     )
 
     plot_model_results(posterior_trace, mapping)

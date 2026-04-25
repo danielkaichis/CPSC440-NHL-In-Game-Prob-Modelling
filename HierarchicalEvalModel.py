@@ -33,7 +33,7 @@ if __name__ == "__main__":
     penalty_share = estimate_home_penalty_share(DEFAULT_TRAIN_FILE_PATHS)
     print(f"Using data-driven home penalty share: {penalty_share:.3f}")
     mc = HierarchicalMonteCarlo(
-        "h_nhl_trace.nc",
+        "models/h_nhl_trace.nc",
         state_map,
         "h_team_mapping.json",
         home_penalty_share=penalty_share,

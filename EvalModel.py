@@ -83,7 +83,7 @@ if __name__ == "__main__":
     penalty_share = estimate_home_penalty_share(DEFAULT_TRAIN_FILE_PATHS)
     print(f"Using data-driven home penalty share: {penalty_share:.3f}")
 
-    mc = NHLMonteCarlo("nhl_advi_trace.nc", mapping, home_penalty_share=penalty_share)
+    mc = NHLMonteCarlo("models/nhl_advi_trace.nc", mapping, home_penalty_share=penalty_share)
     test_data = load_game_data("nhl_raw_data/2025_2026_part2.json")
 
     scores = evaluate_performance(test_data, mc, DEFAULT_CHECKPOINTS)
