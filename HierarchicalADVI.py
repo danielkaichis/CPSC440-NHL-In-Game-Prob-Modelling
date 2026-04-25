@@ -3,7 +3,7 @@ import pymc as pm
 import matplotlib.pyplot as plt
 import arviz as az
 
-from HeirarchicalLoadData import load_h_data 
+from HierarchicalLoadData import load_h_data 
 from advi_utils import run_advi_inference
 from EmpBayes import calc_hierarchical_priors
 from training_pipeline import (

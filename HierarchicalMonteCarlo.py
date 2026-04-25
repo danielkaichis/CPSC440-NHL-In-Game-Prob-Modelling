@@ -2,7 +2,7 @@ import numpy as np
 import arviz as az
 import json
 
-class HeirarchicalMonteCarlo:
+class HierarchicalMonteCarlo:
     def __init__(self, trace_path, state_mapping, team_mapping_path, home_penalty_share=0.52):
         print("Loading Hierarchical Brain...")
         trace = az.from_netcdf(trace_path)

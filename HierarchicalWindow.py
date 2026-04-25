@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import brier_score_loss, log_loss
 import arviz as az
 
-from HeirarchicalLoadData import load_h_data
-from HeirarchicalADVI import run_h_advi
-from HeirarchicalMonteCarlo import HeirarchicalMonteCarlo
+from HierarchicalLoadData import load_h_data
+from HierarchicalADVI import run_h_advi
+from HierarchicalMonteCarlo import HierarchicalMonteCarlo
 from results_store import save_sliding_results
 from penalty_utils import estimate_home_penalty_share
 from training_pipeline import DEFAULT_STATE_MAP, add_state_codes, filter_positive_durations
@@ -70,7 +70,7 @@ def run_optimized_sliding_window(
     hist_trace, _ = run_h_advi(df_hist, state_map, len(team_map), n_iter=pretrain_iter)
     current_priors = _posterior_to_team_priors(hist_trace)
     az.to_netcdf(hist_trace, "current_sliding_trace.nc")
-    mc = HeirarchicalMonteCarlo(
+    mc = HierarchicalMonteCarlo(
         "current_sliding_trace.nc",
         state_map,
         "h_team_mapping.json",
@@ -154,7 +154,7 @@ def run_optimized_sliding_window(
         )
         current_priors = _posterior_to_team_priors(update_trace)
         az.to_netcdf(update_trace, "current_sliding_trace.nc")
-        mc = HeirarchicalMonteCarlo(
+        mc = HierarchicalMonteCarlo(
             "current_sliding_trace.nc",
             state_map,
             "h_team_mapping.json",
@@ -162,92 +162,6 @@ def run_optimized_sliding_window(
         )
 
     return pd.DataFrame(results)
-
-def plot_sliding_results(df_results):
-    if df_results.empty:
-        print("No evaluation windows produced predictions; skipping plot.")
-        return
-
-    if 'date' in df_results.columns:
-        df_results = df_results.copy()
-        df_results['date'] = pd.to_datetime(df_results['date'], errors='coerce')
-
-    if 'checkpoint_sec' in df_results.columns and df_results['checkpoint_sec'].nunique() > 1:
-        mins = sorted(df_results['mins_left'].dropna().unique(), reverse=True)
-
-        fig, ax1 = plt.subplots(figsize=(12, 6))
-        for m in mins:
-            rows = df_results[df_results['mins_left'] == m].sort_values('date')
-            ax1.plot(rows['date'], rows['BS'], marker='o', label=f'{int(m)} min left')
-
-        ax1.set_title('Dynamic Sliding Performance by Checkpoint (Brier Score)')
-        ax1.set_xlabel('Date Window')
-        ax1.set_ylabel('Brier Score')
-        ax1.grid(alpha=0.3)
-        ax1.legend(title='Checkpoint')
-        plt.tight_layout()
-        plt.show()
-
-        if 'LL' in df_results.columns:
-            fig, ax2 = plt.subplots(figsize=(12, 6))
-            for m in mins:
-                rows = df_results[df_results['mins_left'] == m].sort_values('date')
-                ax2.plot(rows['date'], rows['LL'], marker='s', linestyle='--', label=f'{int(m)} min left')
-
-            ax2.set_title('Dynamic Sliding Performance by Checkpoint (Log-Loss)')
-            ax2.set_xlabel('Date Window')
-            ax2.set_ylabel('Log-Loss')
-            ax2.grid(alpha=0.3)
-            ax2.legend(title='Checkpoint')
-            plt.tight_layout()
-            plt.show()
-
-        if 'ACC' in df_results.columns:
-            fig, ax3 = plt.subplots(figsize=(12, 6))
-            for m in mins:
-                rows = df_results[df_results['mins_left'] == m].sort_values('date')
-                ax3.plot(rows['date'], rows['ACC'], marker='^', label=f'{int(m)} min left')
-
-            ax3.set_title('Dynamic Sliding Accuracy by Checkpoint')
-            ax3.set_xlabel('Date Window')
-            ax3.set_ylabel('Accuracy')
-            ax3.set_ylim(0, 1)
-            ax3.grid(alpha=0.3)
-            ax3.legend(title='Checkpoint')
-            plt.tight_layout()
-            plt.show()
-        return
-
-    fig, ax1 = plt.subplots(figsize=(12, 6))
-
-    color = 'tab:green'
-    ax1.set_xlabel('Date')
-    ax1.set_ylabel('Brier Score (Lower is Better)', color=color)
-    ax1.plot(df_results['date'], df_results['BS'], marker='o', color=color, label='Brier Score')
-    ax1.tick_params(axis='y', labelcolor=color)
-
-    ax2 = ax1.twinx()
-    color = 'tab:blue'
-    ax2.set_ylabel('Log-Loss', color=color)
-    ax2.plot(df_results['date'], df_results['LL'], marker='s', linestyle='--', color=color, label='Log-Loss')
-    ax2.tick_params(axis='y', labelcolor=color)
-
-    plt.title('Dynamic Model Performance: Sliding Window Evaluation')
-    fig.tight_layout()
-    plt.grid(alpha=0.3)
-    plt.show()
-
-    if 'ACC' in df_results.columns:
-        plt.figure(figsize=(12, 6))
-        plt.plot(df_results['date'], df_results['ACC'], marker='^', color='tab:purple', label='Accuracy')
-        plt.ylim(0, 1)
-        plt.title('Dynamic Model Accuracy: Sliding Window Evaluation')
-        plt.xlabel('Date')
-        plt.ylabel('Accuracy')
-        plt.grid(alpha=0.3)
-        plt.legend()
-        plt.tight_layout()
-        plt.show()
 
 if __name__ == "__main__":
     state_map = DEFAULT_STATE_MAP
@@ -263,4 +177,3 @@ if __name__ == "__main__":
     stats_df = run_optimized_sliding_window(train, test, state_map)
     save_path = save_sliding_results(stats_df, model_name="hierarchical_sliding")
     print(f"Saved sliding-window results to {save_path}")
-    plot_sliding_results(stats_df)

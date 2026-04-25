@@ -1,5 +1,5 @@
-from HeirarchicalLoadData import load_h_data
-from HeirarchicalMonteCarlo import HeirarchicalMonteCarlo
+from HierarchicalLoadData import load_h_data
+from HierarchicalMonteCarlo import HierarchicalMonteCarlo
 from results_store import save_checkpoint_scores
 from training_pipeline import DEFAULT_TRAIN_FILE_PATHS, DEFAULT_STATE_MAP
 from penalty_utils import estimate_home_penalty_share
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     
     penalty_share = estimate_home_penalty_share(DEFAULT_TRAIN_FILE_PATHS)
     print(f"Using data-driven home penalty share: {penalty_share:.3f}")
-    mc = HeirarchicalMonteCarlo(
+    mc = HierarchicalMonteCarlo(
         "h_nhl_trace.nc",
         state_map,
         "h_team_mapping.json",
