@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.metrics import brier_score_loss
+from sklearn.metrics import brier_score_loss, log_loss
 from HeirarchicalLoadData import load_h_data
 from HeirarchicalMonteCarlo import HeirarchicalMonteCarlo
 from results_store import save_checkpoint_scores
@@ -40,6 +40,7 @@ def evaluate_h_model(test_df, mc_engine, checkpoints):
         acc = float(np.mean(np.array(pred_labels) == np.array(actuals)))
         results[t_rem] = {
             'BS': brier_score_loss(actuals, preds),
+            'LL': log_loss(actuals, np.clip(preds, 1e-6, 1 - 1e-6), labels=[0, 1]),
             'ACC': acc,
         }
     
