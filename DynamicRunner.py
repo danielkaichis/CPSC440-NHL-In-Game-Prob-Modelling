@@ -12,6 +12,8 @@ from results_store import save_sliding_results
 from penalty_utils import estimate_home_penalty_share
 from training_pipeline import DEFAULT_STATE_MAP, add_state_codes, filter_positive_durations
 
+DEFAULT_CHECKPOINTS = [3000, 2400, 1800, 1200, 600, 120]
+
 def _read_game_ids(json_files):
     game_ids = set()
     for file_path in json_files:
@@ -33,7 +35,16 @@ def _posterior_to_team_priors(trace, min_sd=1e-3):
     }
 
 
-def run_optimized_sliding_window(train_files, test_files, state_map, update_days=20, pretrain_iter=40000, update_iter=10000):
+def run_optimized_sliding_window(
+    train_files,
+    test_files,
+    state_map,
+    update_days=20,
+    pretrain_iter=40000,
+    update_iter=10000,
+    checkpoints=None,
+):
+    checkpoints = checkpoints or DEFAULT_CHECKPOINTS
     all_files = list(dict.fromkeys(train_files + test_files))
     penalty_share = estimate_home_penalty_share(train_files)
     print(f"Using data-driven home penalty share: {penalty_share:.3f}")
@@ -90,30 +101,43 @@ def run_optimized_sliding_window(train_files, test_files, state_map, update_days
         print(f"\n--- Window {i+1}: {window_start.date()} to {window_end.date()} ---")
         print(f"Predicting {test_window['game_id'].nunique()} games...")
 
-        y_true, y_prob = [], []
-        for g_id in test_window['game_id'].unique():
-            g_data = test_window[test_window['game_id'] == g_id]
-            idx = (g_data['time_remaining'] - 1800).abs().idxmin()
-            sit = g_data.loc[idx]
+        for t_rem in checkpoints:
+            print(f"  Evaluating checkpoint at {t_rem // 60} mins left...")
+            y_true, y_prob = [], []
 
-            res = mc.simulate(
-                h_id=int(sit['home_team_id']),
-                a_id=int(sit['away_team_id']),
-                h_score=int(sit['home_score']),
-                a_score=int(sit['away_score']),
-                t_rem=1800,
-                state_name=sit['manpower_state'],
+            for g_id in test_window['game_id'].unique():
+                g_data = test_window[test_window['game_id'] == g_id]
+                idx = (g_data['time_remaining'] - t_rem).abs().idxmin()
+                sit = g_data.loc[idx]
+
+                res = mc.simulate(
+                    h_id=int(sit['home_team_id']),
+                    a_id=int(sit['away_team_id']),
+                    h_score=int(sit['home_score']),
+                    a_score=int(sit['away_score']),
+                    t_rem=int(t_rem),
+                    state_name=sit['manpower_state'],
+                )
+
+                y_prob.append(np.clip(res['Home Win %'] / 100.0, 1e-6, 1 - 1e-6))
+                actual = 1 if g_data.iloc[-1]['home_score'] > g_data.iloc[-1]['away_score'] else 0
+                y_true.append(actual)
+
+            bs = brier_score_loss(y_true, y_prob)
+            ll = log_loss(y_true, y_prob, labels=[0, 1])
+            pred_labels = [1 if p >= 0.5 else 0 for p in y_prob]
+            acc = float(np.mean(np.array(pred_labels) == np.array(y_true)))
+
+            results.append(
+                {
+                    'date': window_start,
+                    'checkpoint_sec': int(t_rem),
+                    'mins_left': int(t_rem) // 60,
+                    'BS': bs,
+                    'LL': ll,
+                    'ACC': acc,
+                }
             )
-
-            y_prob.append(np.clip(res['Home Win %'] / 100.0, 1e-6, 1 - 1e-6))
-            actual = 1 if g_data.iloc[-1]['home_score'] > g_data.iloc[-1]['away_score'] else 0
-            y_true.append(actual)
-
-        bs = brier_score_loss(y_true, y_prob)
-        ll = log_loss(y_true, y_prob, labels=[0, 1])
-        pred_labels = [1 if p >= 0.5 else 0 for p in y_prob]
-        acc = float(np.mean(np.array(pred_labels) == np.array(y_true)))
-        results.append({'date': window_start, 'BS': bs, 'LL': ll, 'ACC': acc})
 
         current_season_pool = pd.concat([current_season_pool, test_window], ignore_index=True)
         print(
@@ -142,6 +166,56 @@ def run_optimized_sliding_window(train_files, test_files, state_map, update_days
 def plot_sliding_results(df_results):
     if df_results.empty:
         print("No evaluation windows produced predictions; skipping plot.")
+        return
+
+    if 'date' in df_results.columns:
+        df_results = df_results.copy()
+        df_results['date'] = pd.to_datetime(df_results['date'], errors='coerce')
+
+    if 'checkpoint_sec' in df_results.columns and df_results['checkpoint_sec'].nunique() > 1:
+        mins = sorted(df_results['mins_left'].dropna().unique(), reverse=True)
+
+        fig, ax1 = plt.subplots(figsize=(12, 6))
+        for m in mins:
+            rows = df_results[df_results['mins_left'] == m].sort_values('date')
+            ax1.plot(rows['date'], rows['BS'], marker='o', label=f'{int(m)} min left')
+
+        ax1.set_title('Dynamic Sliding Performance by Checkpoint (Brier Score)')
+        ax1.set_xlabel('Date Window')
+        ax1.set_ylabel('Brier Score')
+        ax1.grid(alpha=0.3)
+        ax1.legend(title='Checkpoint')
+        plt.tight_layout()
+        plt.show()
+
+        if 'LL' in df_results.columns:
+            fig, ax2 = plt.subplots(figsize=(12, 6))
+            for m in mins:
+                rows = df_results[df_results['mins_left'] == m].sort_values('date')
+                ax2.plot(rows['date'], rows['LL'], marker='s', linestyle='--', label=f'{int(m)} min left')
+
+            ax2.set_title('Dynamic Sliding Performance by Checkpoint (Log-Loss)')
+            ax2.set_xlabel('Date Window')
+            ax2.set_ylabel('Log-Loss')
+            ax2.grid(alpha=0.3)
+            ax2.legend(title='Checkpoint')
+            plt.tight_layout()
+            plt.show()
+
+        if 'ACC' in df_results.columns:
+            fig, ax3 = plt.subplots(figsize=(12, 6))
+            for m in mins:
+                rows = df_results[df_results['mins_left'] == m].sort_values('date')
+                ax3.plot(rows['date'], rows['ACC'], marker='^', label=f'{int(m)} min left')
+
+            ax3.set_title('Dynamic Sliding Accuracy by Checkpoint')
+            ax3.set_xlabel('Date Window')
+            ax3.set_ylabel('Accuracy')
+            ax3.set_ylim(0, 1)
+            ax3.grid(alpha=0.3)
+            ax3.legend(title='Checkpoint')
+            plt.tight_layout()
+            plt.show()
         return
 
     fig, ax1 = plt.subplots(figsize=(12, 6))

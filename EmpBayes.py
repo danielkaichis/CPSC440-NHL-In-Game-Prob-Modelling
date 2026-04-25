@@ -2,7 +2,6 @@ import math
 import pandas as pd
 import numpy as np
 
-
 def _gamma_poisson_nll(theta, y, t, w):
     """Negative log marginal likelihood for Gamma-Poisson model on aggregated rows."""
     log_alpha, log_beta = theta
@@ -26,7 +25,7 @@ def _gamma_poisson_nll(theta, y, t, w):
 
 
 def _fit_gamma_poisson_mle(y, t, max_iter=120):
-    """Fit Gamma(alpha, beta) hyperparameters by MLE for Poisson counts with exposure t."""
+    """Fit Gamma(alpha, beta) hyperparameters by MLE for Poisson counts with duration t."""
     y = np.asarray(y, dtype=np.float64)
     t = np.asarray(t, dtype=np.float64)
 

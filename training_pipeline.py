@@ -12,7 +12,6 @@ DEFAULT_TRAIN_FILE_PATHS = [
     'nhl_raw_data/2025_2026_part1.json',
 ]
 
-
 DEFAULT_STATE_MAP = {
     0: '3v3',
     1: '4v4',
