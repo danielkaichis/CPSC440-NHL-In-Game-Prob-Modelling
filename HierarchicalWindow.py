@@ -1,7 +1,6 @@
 import json
 import pandas as pd
 import numpy as np
-from sklearn.metrics import brier_score_loss, log_loss
 import arviz as az
 
 from HierarchicalLoadData import load_h_data
@@ -27,6 +26,7 @@ def _posterior_to_team_priors(trace, min_sd=1e-3):
     off = trace.posterior['off_stars']
     deff = trace.posterior['def_stars']
 
+    # Feed posterior means/SDs forward as priors for the next sliding window.
     return {
         'off_mu': off.mean(dim=("chain", "draw")).values,
         'off_sd': np.clip(off.std(dim=("chain", "draw")).values, min_sd, None),
@@ -90,6 +90,7 @@ def fit_sliding_windows(
         if test_window.empty:
             continue
 
+        # Pool grows monotonically so each new window updates from all prior in-season evidence.
         current_season_pool = pd.concat(
             [current_season_pool, test_window], ignore_index=True
         )
@@ -141,13 +142,14 @@ def evaluate_sliding_windows(
                 t_rem=int(t_rem),
                 state_name=sit['manpower_state'],
             )
+            # Keep probabilities away from exact 0/1 so log-loss remains finite.
             return np.clip(res['Home Win %'] / 100.0, 1e-6, 1 - 1e-6)
 
         scores = evaluate_checkpoints(
             test_window,
             checkpoints,
             predict,
-            progress_msg=lambda t_rem, n: f"    {t_rem // 60:3d} min left | {n} games",
+            progress_msg=lambda t_rem, n: f"{t_rem // 60:3d} min left | {n} games",
         )
 
         for t_rem, metrics in scores.items():

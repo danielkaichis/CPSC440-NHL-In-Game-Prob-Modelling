@@ -17,6 +17,7 @@ class NHLGameState:
     def get_manpower_state(self):
         if not self.situation_code: return 'unknown'
         
+        # NHL situation code packs goalie/skater counts into a 4-digit string.
         situation_str = str(self.situation_code).zfill(4)
         
         if len(situation_str) != 4: return 'special'

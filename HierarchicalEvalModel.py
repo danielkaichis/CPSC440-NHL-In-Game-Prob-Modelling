@@ -18,6 +18,7 @@ def evaluate_h_model(test_df, mc_engine, checkpoints):
             t_rem=t_rem,
             state_name=sit["manpower_state"],
         )
+        # Monte Carlo output is percent, convert back to probability scale for evaluation.
         return res["Home Win %"] / 100.0
 
     return evaluate_checkpoints(

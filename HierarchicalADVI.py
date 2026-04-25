@@ -14,7 +14,7 @@ from training_pipeline import (
     save_trace_to_netcdf,
 )
 
-def run_h_advi(df, state_mapping, n_teams, n_iter=None, priors=None, use_empirical_bayes=True, prior_weight_games=20):
+def run_h_advi(df, state_mapping, n_teams, n_iter=None, priors=None, prior_weight_games=20):
     """
     The Mathematical Core: 
     Uses latent variables (off_stars, def_stars) to model team talent.
@@ -32,7 +32,8 @@ def run_h_advi(df, state_mapping, n_teams, n_iter=None, priors=None, use_empiric
     s_idx = df['state_code'].to_numpy(dtype='int64')
     dur = df['duration_seconds'].to_numpy(dtype='float64')
 
-    if priors is None and use_empirical_bayes:
+    # Warm-start team latents from empirical-Bayes estimates if priors not provided.
+    if priors is None:
         priors = calc_hierarchical_priors(df, n_teams=n_teams, prior_weight_games=prior_weight_games)
 
     if n_iter is None:
@@ -40,6 +41,7 @@ def run_h_advi(df, state_mapping, n_teams, n_iter=None, priors=None, use_empiric
 
     use_custom_priors = priors is not None
     if use_custom_priors:
+        # Prior means/SDs are calibrated from empirical Bayes team-level posteriors.
         off_mu = np.asarray(priors['off_mu'])
         off_sd = np.clip(np.asarray(priors['off_sd']), 1e-3, None)
         def_mu = np.asarray(priors['def_mu'])
@@ -53,19 +55,24 @@ def run_h_advi(df, state_mapping, n_teams, n_iter=None, priors=None, use_empiric
             off_stars = pm.Normal('off_stars', mu=off_mu, sigma=off_sd, shape=n_teams)
             def_stars = pm.Normal('def_stars', mu=def_mu, sigma=def_sd, shape=n_teams)
         else:
+            # Shared hyperpriors shrink team effects toward league-average skill.
             sigma_off = pm.Exponential('sigma_off', 1.0)
             sigma_def = pm.Exponential('sigma_def', 1.0)
             off_stars = pm.Normal('off_stars', mu=0, sigma=sigma_off, shape=n_teams)
             def_stars = pm.Normal('def_stars', mu=0, sigma=sigma_def, shape=n_teams)
         
+        # Home-ice advantage is modeled as a global additive boost to home team log-rates.
         home_ice = pm.Normal('home_ice', mu=0, sigma=0.1)
+        # State intercepts absorb baseline scoring pace differences by manpower state.
         state_ints = pm.Normal('state_ints', mu=-7, sigma=1.5, shape=len(state_mapping))
         
         lambda_pen = pm.Gamma('lambda_pen', alpha=1, beta=1)
 
+        # Team offense/defense effects combine with state intercepts on log-rate scale.
         log_h = state_ints[s_idx] + home_ice + off_stars[h_idx] - def_stars[a_idx]
         log_a = state_ints[s_idx] + off_stars[a_idx] - def_stars[h_idx]
         
+        # Exponentiate linear predictors to recover nonnegative Poisson rates.
         pm.Poisson('h_goals', mu=pm.math.exp(log_h) * dur, observed=df['is_h_goal'])
         pm.Poisson('a_goals', mu=pm.math.exp(log_a) * dur, observed=df['is_a_goal'])
         pm.Poisson('pens', mu=lambda_pen * dur, observed=df['is_penalty'])

@@ -36,6 +36,7 @@ def _attach_penalty_seconds_remaining(df):
                 j += 1
 
             if state in _PP_STATES:
+                # Approximate remaining penalty as time until this PP segment ends.
                 segment_end_time = times[j] if j < n else 0
                 rem[i:j] = np.maximum(0, times[i:j] - segment_end_time)
             i = j
@@ -45,6 +46,8 @@ def _attach_penalty_seconds_remaining(df):
 
 
 def evaluate_performance(test_df, mc_engine, checkpoints):
+    """Evaluate model predictions at fixed checkpoints for each game in test_df by 
+    simulating forward from the nearest observed game state to the checkpoint time."""
     eval_df = _attach_penalty_seconds_remaining(test_df)
 
     def _predict_home_prob(sit, t_rem):

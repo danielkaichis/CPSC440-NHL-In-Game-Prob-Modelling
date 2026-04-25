@@ -41,6 +41,7 @@ def download_dynamic_seasons(seasons, base_dir="nhl_raw_data"):
                     print(f"[{game_id}] Not Found (404).")
                     consecutive_404s += 1
                     
+                    # Consecutive misses are used as an end-of-season stop condition.
                     if consecutive_404s >= 5:
                         print(f"\nHit {consecutive_404s} missing games in a row. End of schedule detected.")
                         break 

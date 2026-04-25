@@ -22,6 +22,7 @@ def run_baseline_advi(df, priors, state_mapping):
     away_goals_obs = df['is_away_goal'].values
     penalties_obs = df['is_penalty'].values
     
+    # Empirical-Bayes hyperparameters for Gamma priors over scoring intensities.
     alpha_h = priors['alpha_home'].values
     beta_h = priors['beta_home'].values
     alpha_a = priors['alpha_away'].values
@@ -32,14 +33,18 @@ def run_baseline_advi(df, priors, state_mapping):
     
     print("Building PyMC Model...")
     with pm.Model() as nhl_model:
+        # One scoring-rate parameter per manpower state for each team side (home/away).
         lambda_home = pm.Gamma('lambda_home', alpha=alpha_h, beta=beta_h, shape=len(state_mapping))
         lambda_away = pm.Gamma('lambda_away', alpha=alpha_a, beta=beta_a, shape=len(state_mapping))
+        # Penalty arrival is modeled as a global process shared across states.
         lambda_pen = pm.Gamma('lambda_pen', alpha=alpha_p, beta=beta_p)
         
+        # Poisson means are rate multiplied by event duration.
         mu_home = lambda_home[state_idx] * durations
         mu_away = lambda_away[state_idx] * durations
         mu_pen = lambda_pen * durations
         
+        # Event rows are treated as conditionally independent Poisson increments.
         home_scoring = pm.Poisson('home_scoring', mu=mu_home, observed=home_goals_obs)
         away_scoring = pm.Poisson('away_scoring', mu=mu_away, observed=away_goals_obs)
         pen_calling = pm.Poisson('pen_calling', mu=mu_pen, observed=penalties_obs)

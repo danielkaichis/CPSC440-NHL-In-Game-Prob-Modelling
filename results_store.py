@@ -5,12 +5,8 @@ import pandas as pd
 def _stamp():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
-def ensure_results_dir(results_dir="results"):
-    os.makedirs(results_dir, exist_ok=True)
-    return results_dir
 
 def save_hierarchical_window_results(df_results, model_name, run_name=None, results_dir="results"):
-    ensure_results_dir(results_dir)
     run_id = run_name or _stamp()
 
     out = df_results.copy()
@@ -24,7 +20,6 @@ def save_hierarchical_window_results(df_results, model_name, run_name=None, resu
     return file_path
 
 def save_checkpoint_scores(scores, model_name, metric_name="BS", run_name=None, results_dir="results"):
-    ensure_results_dir(results_dir)
     run_id = run_name or _stamp()
 
     rows = []
@@ -35,6 +30,7 @@ def save_checkpoint_scores(scores, model_name, metric_name="BS", run_name=None, 
         }
 
         if isinstance(value, dict):
+            # Accept multi-metric score payloads (e.g., BS/LL/ACC) without schema changes.
             for k, v in value.items():
                 row[str(k)] = float(v)
         else:
@@ -54,7 +50,6 @@ def save_checkpoint_scores(scores, model_name, metric_name="BS", run_name=None, 
 
 
 def save_dataframe(df, prefix, run_name=None, results_dir="results"):
-    ensure_results_dir(results_dir)
     run_id = run_name or _stamp()
     file_path = os.path.join(results_dir, f"{prefix}_{run_id}.csv")
     df.to_csv(file_path, index=False)

@@ -3,6 +3,7 @@ import pandas as pd
 from NHLGameState import NHLGameState
 
 def load_h_data(json_files):
+    # Arizona, Utah Hockey Club, and Utah Mammoth are all the same team, so the multiple IDs should be used as one.
     TEAM_ALIASES = {59: 53, 68: 53}
     all_events = []
     
@@ -22,6 +23,7 @@ def load_h_data(json_files):
         if main_id in team_mapping:
             team_mapping[alias] = team_mapping[main_id]
     
+    # Persist mapping so inference and simulation share identical team codes.
     with open('h_team_mapping.json', 'w') as f:
         json.dump(team_mapping, f)
 

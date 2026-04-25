@@ -21,6 +21,7 @@ def _latest_per_model(df, model_col="model", run_col="run_id", time_col="saved_a
     df = df.copy()
     if time_col in df.columns:
         df[time_col] = pd.to_datetime(df[time_col], errors="coerce")
+        # Choose most-recent run per model to avoid plotting old experiments.
         idx = df.sort_values(time_col).groupby(model_col)[time_col].idxmax()
     else:
         idx = df.groupby(model_col)[run_col].idxmax()

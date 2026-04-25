@@ -31,6 +31,7 @@ def load_game_data(file_path):
             current_time = vector['time_remaining']
             vector['game_id'] = game_id
             
+            # Exposure for this row is elapsed time since the previous event.
             vector['duration_seconds'] = max(0, prev_time - current_time)
             
             is_goal = play.get('typeDescKey') == 'goal'

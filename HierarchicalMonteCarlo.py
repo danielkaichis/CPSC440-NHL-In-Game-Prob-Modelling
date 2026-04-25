@@ -13,12 +13,14 @@ class HierarchicalMonteCarlo:
         self.name_to_idx = {v: k for k, v in state_mapping.items()}
         
         with open(team_mapping_path, 'r') as f:
+            # Team mapping aligns raw NHL IDs with latent team-index coordinates in the trace.
             self.team_map = {int(k): v for k, v in json.load(f).items()}
             
         post = trace.posterior
         
         n_teams_in_trace = post.sizes['off_stars_dim_0'] 
         
+        # Extract posterior arrays for offense/defense team effects and state intercepts.
         self.off = post['off_stars'].values.reshape(-1, n_teams_in_trace)
         self.dims = post['def_stars'].values.reshape(-1, n_teams_in_trace)
         self.ints = post['state_ints'].values.reshape(-1, post.sizes['state_ints_dim_0'])
@@ -36,6 +38,7 @@ class HierarchicalMonteCarlo:
             trace.close()
 
     def simulate(self, h_id, a_id, h_score, a_score, t_rem, state_name, pen_rem=0, n_sims=10000):
+        # Convert observed team IDs to latent index space used by posterior arrays.
         h_c, a_c = self.team_map[h_id], self.team_map[a_id]
         
         s_idx = self.name_to_idx.get(state_name, self.name_to_idx['5v5'])
@@ -43,31 +46,37 @@ class HierarchicalMonteCarlo:
         idx_h_pp = self.name_to_idx['home_PP_1']
         idx_a_pp = self.name_to_idx['away_PP_1']
         
+        # Draw posterior samples with replacement to propagate parameter uncertainty.
         u = np.random.randint(0, self.off.shape[0], size=n_sims)
 
-        
+        # Compute current scoring rates based on sampled posterior parameters and current game state.
         h_rate_curr = np.exp(self.ints[u, s_idx] + self.h_ice[u] + self.off[u, h_c] - self.dims[u, a_c])
         a_rate_curr = np.exp(self.ints[u, s_idx] + self.off[u, a_c] - self.dims[u, h_c])
         
+        # For the future time beyond any active penalty, simulate even-strength and power-play phases separately.
         h_rate_5v5 = np.exp(self.ints[u, idx_5v5] + self.h_ice[u] + self.off[u, h_c] - self.dims[u, a_c])
         a_rate_5v5 = np.exp(self.ints[u, idx_5v5] + self.off[u, a_c] - self.dims[u, h_c])
 
         h_rate_pp = np.exp(self.ints[u, idx_h_pp] + self.h_ice[u] + self.off[u, h_c] - self.dims[u, a_c])
         a_rate_pp = np.exp(self.ints[u, idx_a_pp] + self.off[u, a_c] - self.dims[u, h_c])
 
+        # If currently in a penalty, simulate the remainder of that penalty first, then simulate the future time with updated state and reduced time remaining.
         future_time = max(0, t_rem - pen_rem)
         h_pen_rates = self.g_pen[u] * self.home_penalty_share
         a_pen_rates = self.g_pen[u] * (1.0 - self.home_penalty_share)
         h_adv_count = np.random.poisson(h_pen_rates * future_time)
         a_adv_count = np.random.poisson(a_pen_rates * future_time)
 
+        # Simulate penalty time for each team based on expected penalty arrivals, and an average penalty time of 105s.
         h_pp_time = h_adv_count * 105
         a_pp_time = a_adv_count * 105
         
+        # Clamp overlap so PP time partitions the time interval without going negative.
         h_pp_time = np.minimum(h_pp_time, future_time)
         a_pp_time = np.minimum(a_pp_time, future_time - h_pp_time)
         t_5v5 = np.maximum(0, future_time - h_pp_time - a_pp_time)
 
+        # Sum independent Poisson increments from current state, even-strength, and PP phases.
         h_goals = (np.random.poisson(h_rate_curr * pen_rem) + 
                    np.random.poisson(h_rate_5v5 * t_5v5) + 
                    np.random.poisson(h_rate_pp * h_pp_time))

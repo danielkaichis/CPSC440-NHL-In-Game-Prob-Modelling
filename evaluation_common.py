@@ -16,6 +16,7 @@ def evaluate_checkpoints(test_df, checkpoints, predict_home_win_prob, progress_m
 
         for g_id in game_ids:
             game_data = test_df[test_df["game_id"] == g_id]
+            # Evaluate the nearest observed game state to the checkpoint time.
             idx = (game_data["time_remaining"] - t_rem).abs().idxmin()
             sit = game_data.loc[idx]
 

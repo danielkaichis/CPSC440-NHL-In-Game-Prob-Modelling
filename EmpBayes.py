@@ -5,6 +5,7 @@ import numpy as np
 def _gamma_poisson_nll(theta, y, t, w):
     """Negative log marginal likelihood for Gamma-Poisson model on aggregated rows."""
     log_alpha, log_beta = theta
+    # Optimize in log-space for numerical stability.
     alpha = np.exp(log_alpha)
     beta = np.exp(log_beta)
 
@@ -13,6 +14,7 @@ def _gamma_poisson_nll(theta, y, t, w):
     lgamma_y_plus_1 = np.array([math.lgamma(v + 1.0) for v in y])
 
     log_t = np.where(y > 0, np.log(t), 0.0)
+    # Closed-form Gamma-Poisson marginal log-likelihood per row.
     logp = (
         alpha * np.log(beta)
         - lgamma_alpha
@@ -36,6 +38,7 @@ def _fit_gamma_poisson_mle(y, t, max_iter=120):
         return 1.0, 1.0
 
     agg = (
+        # Aggregate repeated (y, t) pairs to reduce repeated likelihood work.
         pd.DataFrame({'y': y, 't': t})
         .groupby(['y', 't'], as_index=False)
         .size()
@@ -45,6 +48,7 @@ def _fit_gamma_poisson_mle(y, t, max_iter=120):
     w_u = agg['size'].to_numpy(dtype=np.float64)
 
     rate_mean = np.sum(y) / np.sum(t)
+    # Method-of-moments initialization for faster convergence than random start.
     alpha0 = 1.0
     beta0 = alpha0 / max(rate_mean, 1e-8)
     theta = np.log(np.array([alpha0, beta0], dtype=np.float64))
@@ -59,6 +63,7 @@ def _fit_gamma_poisson_mle(y, t, max_iter=120):
         for j in range(2):
             step = np.zeros_like(theta)
             step[j] = eps
+            # Finite-difference gradient approximation.
             f_plus = _gamma_poisson_nll(theta + step, y_u, t_u, w_u)
             f_minus = _gamma_poisson_nll(theta - step, y_u, t_u, w_u)
             grad[j] = (f_plus - f_minus) / (2 * eps)
@@ -67,11 +72,13 @@ def _fit_gamma_poisson_mle(y, t, max_iter=120):
         trial_val = _gamma_poisson_nll(trial, y_u, t_u, w_u)
 
         if np.isfinite(trial_val) and trial_val < best_val:
+            # Slightly increase step size on successful descent.
             theta = trial
             best_theta = trial
             best_val = trial_val
             lr = min(lr * 1.05, 1.0)
         else:
+            # Back off a lot if the objective gets worse or unstable.
             lr *= 0.5
 
         if lr < 1e-6 or np.linalg.norm(grad) < 1e-5:
@@ -82,7 +89,11 @@ def _fit_gamma_poisson_mle(y, t, max_iter=120):
 
 
 def calc_priors(df, prior_weight_games=20):
+    """Calculate empirical-Bayes Gamma priors for state intercepts and penalty rate."""
+    # prior_weight_games: phantom games of league-average data injected before
+    # observing any real results. A higher number leads to stronger shrinkage toward the mean.
     df['manpower_state'] = df['manpower_state'].astype('category')
+    # Encode manpower states once so priors line up with PyMC tensor indexing.
     df['state_code'] = df['manpower_state'].cat.codes
     state_mapping = dict(enumerate(df['manpower_state'].cat.categories))
     
@@ -107,10 +118,12 @@ def calc_priors(df, prior_weight_games=20):
         a_h_raw, b_h_raw = _fit_gamma_poisson_mle(y_home, t_state)
         a_a_raw, b_a_raw = _fit_gamma_poisson_mle(y_away, t_state)
 
+        # Convert Gamma(alpha,beta) hyperparameters into prior mean rates.
         mean_h = a_h_raw / max(b_h_raw, 1e-12)
         mean_a = a_a_raw / max(b_a_raw, 1e-12)
 
         state_total_time = float(np.sum(t_state))
+        # Scale prior pseudo-observations by how much time this state is observed in games.
         target_beta_state = prior_weight_games * 3600.0 * (state_total_time / max(total_duration_all, 1e-12))
 
         alpha_home_list.append(mean_h * target_beta_state)
@@ -125,6 +138,7 @@ def calc_priors(df, prior_weight_games=20):
     target_beta_pen = prior_weight_games * 3600.0
 
     eps = 1e-5
+    # Add small epsilon to keep all Gamma parammeters positive.
     priors['alpha_home'] = np.array(alpha_home_list, dtype=np.float64) + eps
     priors['beta_home'] = np.array(beta_home_list, dtype=np.float64) + eps
 
@@ -139,6 +153,7 @@ def calc_priors(df, prior_weight_games=20):
 
 def calc_hierarchical_priors(df, n_teams, prior_weight_games=20):
     """Build empirical-Bayes priors for hierarchical team offense/defense stars.
+    Team effects are encoded as log-scale multipliers relative to the league mean, regularized toward zero.
 
     Returns a dict with vectors:
     - off_mu, off_sd
@@ -173,6 +188,7 @@ def calc_hierarchical_priors(df, n_teams, prior_weight_games=20):
     team = base.merge(exp_home, on='team', how='left').merge(exp_away, on='team', how='left')
     team = team.merge(gf_home, on='team', how='left').merge(gf_away, on='team', how='left')
     team = team.merge(ga_home, on='team', how='left').merge(ga_away, on='team', how='left')
+    # Missing teams in a split get zero counts/exposure, then get regularized by global priors.
     team = team.fillna(0.0)
 
     exposure = team['exp_home'].to_numpy(dtype=np.float64) + team['exp_away'].to_numpy(dtype=np.float64)
@@ -182,11 +198,13 @@ def calc_hierarchical_priors(df, n_teams, prior_weight_games=20):
     a_off, b_off = _fit_gamma_poisson_mle(goals_for, exposure)
     a_ga, b_ga = _fit_gamma_poisson_mle(goals_against, exposure)
 
+    # Empirical-Bayes posterior update: prior pseudo-counts plus observed totals.
     off_post_alpha = a_off + goals_for
     off_post_beta = b_off + exposure
     ga_post_alpha = a_ga + goals_against
     ga_post_beta = b_ga + exposure
 
+    # Convert Gamma posterior parameters into mean/variance for team scoring rates, then into log-space priors for additive PyMC team latent variables.
     off_rate_mean = off_post_alpha / np.maximum(off_post_beta, eps)
     off_rate_var = off_post_alpha / np.maximum(off_post_beta ** 2, eps)
 
@@ -203,10 +221,13 @@ def calc_hierarchical_priors(df, n_teams, prior_weight_games=20):
     def_sd = np.sqrt(np.maximum(ga_rate_var, eps)) / np.maximum(ga_rate_mean, eps)
 
     scale = prior_weight_games / max(np.sum(exposure) / 3600.0, eps)
+    # scale > 1 means little data relative to prior_weight_games.
+    # Clamp to [0.05, 1.0] so we never fully collapse or fully ignore the prior.
     shrink = np.clip(scale, 0.05, 1.0)
     off_sd = np.maximum(off_sd / np.sqrt(shrink), 1e-3)
     def_sd = np.maximum(def_sd / np.sqrt(shrink), 1e-3)
 
+    # Re-center priors so team effects are around zero mean across the league.
     off_mu = off_mu - np.mean(off_mu)
     def_mu = def_mu - np.mean(def_mu)
 
