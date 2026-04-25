@@ -11,7 +11,6 @@ from utils.evaluation_utils import (
 
 _PP_STATES = {"home_PP_1", "home_PP_2", "away_PP_1", "away_PP_2"}
 
-_N_SIMULATIONS = 5000
 _PROB_CLIP_LOW = 1e-6
 _PROB_CLIP_HIGH = 1.0 - 1e-6
 
@@ -58,7 +57,6 @@ def evaluate_performance(test_df, mc_engine, checkpoints):
             time_remaining_sec=t_rem,
             current_state_name=sit["manpower_state"],
             penalty_sec_remaining=penalty_sec_remaining,
-            n_simulations=_N_SIMULATIONS,
         )
 
         home_pct = res["Home Win %"]

@@ -8,7 +8,7 @@ from utils.evaluation_utils import (
     evaluate_checkpoints,
 )
 
-def evaluate_h_model(test_df, mc_engine, checkpoints):
+def evaluate_team_model(test_df, mc_engine, checkpoints):
     def _predict_home_prob(sit, t_rem):
         res = mc_engine.simulate(
             h_id=int(sit["home_team_id"]),
@@ -43,6 +43,6 @@ if __name__ == "__main__":
     test_df, _ = load_team_data(['nhl_raw_data/2025_2026_part2.json'])
     
     checkpoints = DEFAULT_CHECKPOINTS
-    h_scores = evaluate_h_model(test_df, mc, checkpoints)
+    h_scores = evaluate_team_model(test_df, mc, checkpoints)
     save_path = save_checkpoint_scores(h_scores, model_name="team")
     print(f"Saved team specific checkpoint results to {save_path}")
