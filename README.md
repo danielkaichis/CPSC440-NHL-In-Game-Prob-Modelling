@@ -6,7 +6,12 @@ Code prefixed with "league" is for the model that estimates league wide scoring 
 Code prefixed with "team" is for the model that estimates team-specific scoring rates.
 
 ## Usage
-To run the baseline model that estimates league wide scoring rates, run:
+First install dependencies
+```
+pip install -r requirements.txt
+```
+
+To run the baseline model that estimates league wide scoring rates, from the main folder run:
 ```
 # fit model
 python3 league_advi.py
@@ -14,7 +19,7 @@ python3 league_advi.py
 python3 league_eval_model.py
 ```
 
-To run the model that estimates team-specific scoring rates, run:
+To run the model that estimates team-specific scoring rates, from the main folder run:
 ```
 # fit model
 python3 -m team_models.team_advi
